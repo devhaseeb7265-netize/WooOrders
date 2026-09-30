@@ -398,66 +398,72 @@ export function PrintableInvoice({
           }
         }
 
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 10mm;
-          }
+        @page {
+          size: A4 portrait;
+          margin: 0mm !important; /* Strips out browser timestamp, page title, URL, and page numbering */
+        }
 
-          /* Completely hide everything in standard UI */
+        @media print {
           html, body {
             background: #ffffff !important;
             margin: 0 !important;
             padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
           }
 
-          body * {
-            visibility: hidden !important;
+          /* Completely remove main application UI and preview modal from print layout flow */
+          body > *:not(#print-root) {
+            display: none !important;
           }
 
-          /* Only show print container */
-          .print-only-container,
-          .print-only-container * {
-            visibility: visible !important;
+          .screen-preview-modal {
+            display: none !important;
           }
 
-          .print-only-container {
+          /* Render ONLY the printable container */
+          #print-root {
             display: block !important;
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: relative !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
+            visibility: visible !important;
+          }
+
+          #print-root * {
+            visibility: visible !important;
           }
 
           /* Strict 1-Order-Per-Page rule */
           .single-invoice-sheet {
-            page-break-before: always !important;
-            break-before: page !important;
-            page-break-after: always !important;
-            break-after: page !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            min-height: 297mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            padding: 14mm 16mm !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            page-break-after: always !important;
+            break-after: page !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
-            height: 275mm !important; /* Perfect A4 height safety */
-            max-height: 275mm !important;
-            box-sizing: border-box !important;
-            padding: 10mm 12mm !important;
             background: #ffffff !important;
+            overflow: hidden !important;
           }
 
-          /* First page should not have a blank leading break */
+          /* First page avoids leading break, and last page NEVER produces a blank trailing page */
           .single-invoice-sheet:first-child {
             page-break-before: avoid !important;
             break-before: avoid !important;
           }
 
-          /* Prevent duplicate preview container from rendering */
-          .screen-preview-modal {
-            display: none !important;
+          .single-invoice-sheet:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
         }
       `}</style>
