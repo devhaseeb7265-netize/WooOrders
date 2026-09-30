@@ -349,12 +349,33 @@ export function OrdersDataTable({
     getFilteredRowModel: getFilteredRowModel(),
     initialState: {
       pagination: {
-        pageSize: 10,
+        pageSize: 100,
       },
     },
   });
 
   const selectedCount = Object.keys(rowSelection).length;
+
+  const selectQuickCount = (count: number) => {
+    const targetCount = Math.min(count, filteredData.length);
+    const newSelection: RowSelectionState = {};
+    for (let i = 0; i < targetCount; i++) {
+      newSelection[i] = true;
+    }
+    setRowSelection(newSelection);
+  };
+
+  const selectAllFilteredOrders = () => {
+    const newSelection: RowSelectionState = {};
+    filteredData.forEach((_, idx) => {
+      newSelection[idx] = true;
+    });
+    setRowSelection(newSelection);
+  };
+
+  const clearSelection = () => {
+    setRowSelection({});
+  };
 
   const handleBatchStatusApply = (status: WCOrderStatus) => {
     const selectedIndices = Object.keys(rowSelection).map(Number);
@@ -363,6 +384,10 @@ export function OrdersDataTable({
       .filter((id): id is number => typeof id === "number");
 
     if (selectedIds.length > 0) {
+      // 1. Instant Optimistic UI Update (0ms delay across all 1500 rows)
+      onBatchStatusChange(selectedIds, status);
+
+      // 2. Open High-Speed Background Progress Sync
       setBatchModalState({
         isOpen: true,
         orderIds: selectedIds,
@@ -380,6 +405,10 @@ export function OrdersDataTable({
       .filter((id): id is number => typeof id === "number");
 
     if (selectedIds.length > 0) {
+      // Instant Optimistic Update
+      if (onBatchDelete) onBatchDelete(selectedIds);
+      else batchTrashOrders(selectedIds);
+
       setBatchModalState({
         isOpen: true,
         orderIds: selectedIds,
@@ -395,6 +424,10 @@ export function OrdersDataTable({
       .filter((id): id is number => typeof id === "number");
 
     if (selectedIds.length > 0) {
+      // Instant Optimistic Update
+      if (onBatchRestore) onBatchRestore(selectedIds);
+      else batchRestoreOrders(selectedIds);
+
       setBatchModalState({
         isOpen: true,
         orderIds: selectedIds,
@@ -412,8 +445,12 @@ export function OrdersDataTable({
 
     if (
       selectedIds.length > 0 &&
-      window.confirm(`Permanently delete ${selectedIds.length} orders? This cannot be undone.`)
+      window.confirm(`Permanently delete ${selectedIds.length.toLocaleString()} orders? This cannot be undone.`)
     ) {
+      // Instant Optimistic Update
+      if (onBatchPermanentlyDelete) onBatchPermanentlyDelete(selectedIds);
+      else batchPermanentlyDeleteOrders(selectedIds);
+
       setBatchModalState({
         isOpen: true,
         orderIds: selectedIds,
@@ -643,6 +680,88 @@ export function OrdersDataTable({
         </div>
       )}
 
+      {/* Quick Multi-Volume Selection Bar */}
+      <div className="px-6 py-2.5 bg-zinc-50/70 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-3 text-xs select-none">
+        <div className="flex flex-wrap items-center gap-1.5 text-zinc-500 font-medium">
+          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mr-1">
+            Quick Select:
+          </span>
+          <button
+            type="button"
+            onClick={() => selectQuickCount(100)}
+            className="px-2.5 py-1 rounded-lg bg-white hover:bg-zinc-100 border border-zinc-200/80 text-zinc-700 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+          >
+            100 Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => selectQuickCount(500)}
+            className="px-2.5 py-1 rounded-lg bg-white hover:bg-zinc-100 border border-zinc-200/80 text-zinc-700 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+          >
+            500 Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => selectQuickCount(1000)}
+            className="px-2.5 py-1 rounded-lg bg-white hover:bg-zinc-100 border border-zinc-200/80 text-zinc-700 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+          >
+            1,000 Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => selectQuickCount(1500)}
+            className="px-2.5 py-1 rounded-lg bg-white hover:bg-zinc-100 border border-zinc-200/80 text-zinc-700 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+          >
+            1,500 Orders
+          </button>
+          <button
+            type="button"
+            onClick={selectAllFilteredOrders}
+            className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 text-[#00875A] font-bold text-[11px] transition-colors cursor-pointer"
+          >
+            All ({filteredData.length.toLocaleString()})
+          </button>
+          {selectedCount > 0 && (
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-rose-600 text-[11px] font-semibold transition-colors cursor-pointer ml-1"
+            >
+              Deselect All
+            </button>
+          )}
+        </div>
+
+        <div className="text-[11px] text-zinc-500 font-mono">
+          {selectedCount > 0 ? (
+            <span>
+              <strong className="text-zinc-900 font-bold">{selectedCount.toLocaleString()}</strong> of{" "}
+              {filteredData.length.toLocaleString()} selected
+            </span>
+          ) : (
+            <span>Total {filteredData.length.toLocaleString()} orders</span>
+          )}
+        </div>
+      </div>
+
+      {/* Gmail-Style Global Selection Banner when all visible page rows are selected */}
+      {table.getIsAllPageRowsSelected() &&
+        filteredData.length > table.getRowModel().rows.length &&
+        selectedCount < filteredData.length && (
+          <div className="bg-emerald-50 border-b border-emerald-200/90 px-6 py-2 flex items-center justify-between text-xs text-emerald-900 animate-in fade-in select-none">
+            <span>
+              All <strong>{table.getRowModel().rows.length}</strong> orders on this page are selected.
+            </span>
+            <button
+              type="button"
+              onClick={selectAllFilteredOrders}
+              className="font-bold underline text-[#00875A] hover:text-[#00704A] cursor-pointer"
+            >
+              Select all {filteredData.length.toLocaleString()} orders matching this filter
+            </button>
+          </div>
+        )}
+
       {/* TanStack Orders Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
@@ -695,15 +814,15 @@ export function OrdersDataTable({
 
       {/* Pagination & Per-Page Controls */}
       <div className="p-4 border-t border-zinc-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs select-none">
-        <div className="flex items-center gap-2 text-zinc-500">
+        <div className="flex flex-wrap items-center gap-2 text-zinc-500">
           <span>Rows per page:</span>
-          <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-full border border-zinc-200/80">
-            {[5, 10, 20, 50].map((pageSize) => (
+          <div className="flex flex-wrap items-center gap-1 bg-zinc-100 p-0.5 rounded-xl border border-zinc-200/80">
+            {[100, 500, 1000, 1500].map((pageSize) => (
               <button
                 key={pageSize}
                 type="button"
                 onClick={() => table.setPageSize(pageSize)}
-                className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-semibold transition-colors cursor-pointer ${
+                className={`px-3 py-1 rounded-lg font-mono text-xs font-semibold transition-colors cursor-pointer ${
                   table.getState().pagination.pageSize === pageSize
                     ? "bg-white text-zinc-900 shadow-2xs font-bold"
                     : "text-zinc-500 hover:text-zinc-800"
@@ -714,7 +833,7 @@ export function OrdersDataTable({
             ))}
           </div>
           <span className="text-zinc-400 ml-1">
-            Total {filteredData.length} records
+            Total {filteredData.length.toLocaleString()} records
           </span>
         </div>
 

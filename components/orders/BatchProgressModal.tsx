@@ -31,7 +31,7 @@ export interface BatchProgressModalProps {
   onCompleted?: () => void;
 }
 
-const CHUNK_SIZE = 20;
+const CHUNK_SIZE = 100;
 
 export function BatchProgressModal({
   isOpen,
@@ -70,7 +70,7 @@ export function BatchProgressModal({
     setUpdatedCount(0);
     setFailedCount(0);
 
-    // Split into sequential chunks of 20 items
+    // Split into high-speed chunks of 100 items (native WooCommerce & Supabase batch capacity)
     const chunks: number[][] = [];
     for (let i = 0; i < totalCount; i += CHUNK_SIZE) {
       chunks.push(orderIds.slice(i, i + CHUNK_SIZE));
@@ -122,8 +122,8 @@ export function BatchProgressModal({
         setUpdatedCount(currentUpdated);
         setFailedCount(currentFailed);
 
-        // Micro-delay between batches to yield thread and ensure smooth UI transitions
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        // Fluid non-blocking micro-delay (20ms) for ultra-fast progress visualization
+        await new Promise((resolve) => setTimeout(resolve, 20));
       }
 
       setIsProcessing(false);

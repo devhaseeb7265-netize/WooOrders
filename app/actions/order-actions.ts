@@ -248,7 +248,8 @@ export async function permanentlyDeleteOrderAction(
   }
 }
 /**
- * Batch Update Order Status
+ * High-Speed Batch Update Order Status
+ * Uses native WooCommerce batch endpoint (/wp-json/wc/v3/orders/batch) in chunks of 100
  */
 export async function batchUpdateOrderStatusAction(
   storeId: string,
@@ -258,7 +259,7 @@ export async function batchUpdateOrderStatusAction(
   try {
     const supabase = getSupabaseServerClient();
 
-    // 1. Update Supabase store_orders in bulk
+    // 1. Instant Bulk Update in Supabase store_orders
     const { error: dbError } = await supabase
       .from("store_orders")
       .update({ status: newStatus })
@@ -269,7 +270,7 @@ export async function batchUpdateOrderStatusAction(
       return { success: false, error: dbError.message };
     }
 
-    // 2. Upstream WooCommerce API Call
+    // 2. Upstream WooCommerce Native Batch API Call (/orders/batch)
     const { data: store } = await supabase
       .from("connected_stores")
       .select("url, consumer_key, consumer_secret")
@@ -282,15 +283,25 @@ export async function batchUpdateOrderStatusAction(
       ).toString("base64");
       const cleanUrl = store.url.replace(/\/+$/, "");
 
+      // Chunk into groups of 100 (WooCommerce batch max)
+      const WC_BATCH_SIZE = 100;
+      const batches: number[][] = [];
+      for (let i = 0; i < wcOrderIds.length; i += WC_BATCH_SIZE) {
+        batches.push(wcOrderIds.slice(i, i + WC_BATCH_SIZE));
+      }
+
       await Promise.allSettled(
-        wcOrderIds.map((id) =>
-          fetch(`${cleanUrl}/wp-json/wc/v3/orders/${id}`, {
-            method: "PUT",
+        batches.map((batchIds) =>
+          fetch(`${cleanUrl}/wp-json/wc/v3/orders/batch`, {
+            method: "POST",
             headers: {
               Authorization: `Basic ${basicAuthToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ status: newStatus }),
+            body: JSON.stringify({
+              update: batchIds.map((id) => ({ id, status: newStatus })),
+            }),
+            signal: AbortSignal.timeout(8000),
           })
         )
       );
@@ -308,7 +319,7 @@ export async function batchUpdateOrderStatusAction(
 }
 
 /**
- * Batch Move to Trash
+ * High-Speed Batch Move to Trash
  */
 export async function batchTrashOrdersAction(
   storeId: string,
@@ -317,14 +328,14 @@ export async function batchTrashOrdersAction(
   try {
     const supabase = getSupabaseServerClient();
 
-    // 1. Update Supabase store_orders in bulk
+    // 1. Instant Bulk Update in Supabase store_orders
     await supabase
       .from("store_orders")
       .update({ status: "trash" })
       .eq("store_id", storeId)
       .in("wc_order_id", wcOrderIds);
 
-    // 2. Upstream WooCommerce API Calls in parallel
+    // 2. Upstream WooCommerce Native Batch Delete
     const { data: store } = await supabase
       .from("connected_stores")
       .select("url, consumer_key, consumer_secret")
@@ -337,14 +348,24 @@ export async function batchTrashOrdersAction(
       ).toString("base64");
       const cleanUrl = store.url.replace(/\/+$/, "");
 
+      const WC_BATCH_SIZE = 100;
+      const batches: number[][] = [];
+      for (let i = 0; i < wcOrderIds.length; i += WC_BATCH_SIZE) {
+        batches.push(wcOrderIds.slice(i, i + WC_BATCH_SIZE));
+      }
+
       await Promise.allSettled(
-        wcOrderIds.map((id) =>
-          fetch(`${cleanUrl}/wp-json/wc/v3/orders/${id}`, {
-            method: "DELETE",
+        batches.map((batchIds) =>
+          fetch(`${cleanUrl}/wp-json/wc/v3/orders/batch`, {
+            method: "POST",
             headers: {
               Authorization: `Basic ${basicAuthToken}`,
-              Accept: "application/json",
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              delete: batchIds,
+            }),
+            signal: AbortSignal.timeout(8000),
           })
         )
       );
@@ -362,7 +383,7 @@ export async function batchTrashOrdersAction(
 }
 
 /**
- * Batch Restore from Trash
+ * High-Speed Batch Restore from Trash
  */
 export async function batchRestoreOrdersAction(
   storeId: string,
@@ -390,15 +411,24 @@ export async function batchRestoreOrdersAction(
       ).toString("base64");
       const cleanUrl = store.url.replace(/\/+$/, "");
 
+      const WC_BATCH_SIZE = 100;
+      const batches: number[][] = [];
+      for (let i = 0; i < wcOrderIds.length; i += WC_BATCH_SIZE) {
+        batches.push(wcOrderIds.slice(i, i + WC_BATCH_SIZE));
+      }
+
       await Promise.allSettled(
-        wcOrderIds.map((id) =>
-          fetch(`${cleanUrl}/wp-json/wc/v3/orders/${id}`, {
-            method: "PUT",
+        batches.map((batchIds) =>
+          fetch(`${cleanUrl}/wp-json/wc/v3/orders/batch`, {
+            method: "POST",
             headers: {
               Authorization: `Basic ${basicAuthToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ status: targetStatus }),
+            body: JSON.stringify({
+              update: batchIds.map((id) => ({ id, status: targetStatus })),
+            }),
+            signal: AbortSignal.timeout(8000),
           })
         )
       );
@@ -416,7 +446,7 @@ export async function batchRestoreOrdersAction(
 }
 
 /**
- * Batch Permanent Delete
+ * High-Speed Batch Permanent Delete
  */
 export async function batchPermanentlyDeleteOrdersAction(
   storeId: string,
@@ -443,14 +473,24 @@ export async function batchPermanentlyDeleteOrdersAction(
       ).toString("base64");
       const cleanUrl = store.url.replace(/\/+$/, "");
 
+      const WC_BATCH_SIZE = 100;
+      const batches: number[][] = [];
+      for (let i = 0; i < wcOrderIds.length; i += WC_BATCH_SIZE) {
+        batches.push(wcOrderIds.slice(i, i + WC_BATCH_SIZE));
+      }
+
       await Promise.allSettled(
-        wcOrderIds.map((id) =>
-          fetch(`${cleanUrl}/wp-json/wc/v3/orders/${id}?force=true`, {
-            method: "DELETE",
+        batches.map((batchIds) =>
+          fetch(`${cleanUrl}/wp-json/wc/v3/orders/batch?force=true`, {
+            method: "POST",
             headers: {
               Authorization: `Basic ${basicAuthToken}`,
-              Accept: "application/json",
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              delete: batchIds,
+            }),
+            signal: AbortSignal.timeout(8000),
           })
         )
       );

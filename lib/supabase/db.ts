@@ -156,20 +156,37 @@ export async function fetchOrdersForStore(
   if (!isUUID) return [];
 
   try {
-    const { data, error } = await supabase
-      .from("store_orders")
-      .select("*")
-      .eq("store_id", storeId)
-      .order("date_created", { ascending: false });
+    let allRows: DBStoreOrder[] = [];
+    let from = 0;
+    const PAGE_CHUNK = 1000;
+    let hasMore = true;
 
-    if (error) {
-      console.error("[fetchOrdersForStore]", error.message);
-      return [];
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from("store_orders")
+        .select("*")
+        .eq("store_id", storeId)
+        .order("date_created", { ascending: false })
+        .range(from, from + PAGE_CHUNK - 1);
+
+      if (error) {
+        console.error("[fetchOrdersForStore]", error.message);
+        break;
+      }
+
+      if (data && data.length > 0) {
+        allRows = allRows.concat(data as DBStoreOrder[]);
+        if (data.length < PAGE_CHUNK || allRows.length >= 15000) {
+          hasMore = false;
+        } else {
+          from += PAGE_CHUNK;
+        }
+      } else {
+        hasMore = false;
+      }
     }
 
-    return ((data as DBStoreOrder[]) ?? []).map((row) =>
-      dbRowToWCOrder(row, storeName)
-    );
+    return allRows.map((row) => dbRowToWCOrder(row, storeName));
   } catch (err) {
     console.error("[fetchOrdersForStore] exception", err);
     return [];

@@ -24,6 +24,7 @@ import {
   trashOrderAction,
   restoreOrderAction,
   permanentlyDeleteOrderAction,
+  batchUpdateOrderStatusAction,
   batchTrashOrdersAction,
   batchRestoreOrdersAction,
   batchPermanentlyDeleteOrdersAction,
@@ -734,9 +735,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         prev.map((o) => (orderIds.includes(o.id) ? { ...o, status: newStatus } : o))
       );
 
-      await Promise.all(
-        orderIds.map((id) => updateStoreOrderStatusAction(activeStoreId, id, newStatus))
-      );
+      await batchUpdateOrderStatusAction(activeStoreId, orderIds, newStatus);
     },
     [activeStoreId]
   );
